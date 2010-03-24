@@ -601,7 +601,7 @@ function fakeKeyEvent(e, na, o) {
 	});
 
 	test('tinymce.dom.DOMUtils - encode', 1, function() {
-		equals(DOM.encode('abc<>"&\'едц'), 'abc&lt;&gt;&quot;&amp;\'едц');
+		equals(DOM.encode('abc<>"&\'едц'), 'abc&lt;&gt;&quot;&amp;&#39;едц');
 	});
 
 	test('tinymce.dom.DOMUtils - setGetAttrib', 11, function() {
@@ -847,8 +847,9 @@ function fakeKeyEvent(e, na, o) {
 	test('tinymce.dom.DOMUtils - isBlock', 4, function() {
 		ok(DOM.isBlock(DOM.create('div')));
 		ok(DOM.isBlock('DIV'));
+		ok(!DOM.isBlock('span'));
 		ok(!DOM.isBlock('SPAN'));
-		ok(!DOM.isBlock('div'));
+		ok(DOM.isBlock('div'));
 	});
 
 	test('tinymce.dom.DOMUtils - remove', 3, function() {
@@ -1051,6 +1052,8 @@ function fakeKeyEvent(e, na, o) {
 	test('tinymce.DOM.Serializer - serialize', 77, function() {
 		var ser = new tinymce.dom.Serializer({dom : DOM}), h;
 
+		expect(77);
+
 		DOM.add(document.body, 'div', {id : 'test'});
 		DOM.counter = 0;
 
@@ -1210,7 +1213,7 @@ function fakeKeyEvent(e, na, o) {
 		DOM.setHTML('test', '<img src="file.gif" /><hr />');
 		equals(ser.serialize(DOM.get('test')), '<div id="test"><img src="file.gif" border="0" alt="" /><hr /></div>');
 
-		ser.setRules('*[*]');
+		ser.setRules('div[id],span[id|class],b,a[href]');
 		DOM.setHTML('test', '<span id="test2"><b>abc</b></span>123<a href="file.html">link</a>');
 		a = ser.onPreProcess.add(function(se, o) {
 			equals(o.test, 'abc');
@@ -1220,10 +1223,11 @@ function fakeKeyEvent(e, na, o) {
 			equals(o.test, 'abc');
 			o.content = o.content.replace(/<b>/g, '<b class="123">');
 		});
-		equals(ser.serialize(DOM.get('test'), {test : 'abc'}), '<div id="test"><span class="abc" id="test2"><b class="123">abc</b></span>123<a href="file.html">link</a></div>');
+		equals(ser.serialize(DOM.get('test'), {test : 'abc'}), '<div id="test"><span id="test2" class="abc"><b class="123">abc</b></span>123<a href="file.html">link</a></div>');
 		ser.onPreProcess.remove(a);
 		ser.onPostProcess.remove(b);
 
+		ser = new tinymce.dom.Serializer({fix_list_elements : true});
 		ser.setRules('*[*]');
 		DOM.setHTML('test', '<ol><li>a</li><ol><li>b</li><li>c</li></ol><li>e</li></ol>');
 		equals(ser.serialize(DOM.get('test')), '<div id="test"><ol><li>a<ol><li>b</li><li>c</li></ol></li><li>e</li></ol></div>');
@@ -1232,7 +1236,7 @@ function fakeKeyEvent(e, na, o) {
 		DOM.setHTML('test', '<img src="file.gif" alt="" />');
 		equals(ser.serialize(DOM.get('test')), '<div id="test"><img src="file.gif" alt="" /></div>', null, tinymce.isOldWebKit);
 
-		ser = new tinymce.dom.Serializer({invalid_elements : 'hr,br'});
+		ser = new tinymce.dom.Serializer({valid_elements : 'div[id],hr,br,img[src]', invalid_elements : 'hr,br'});
 		DOM.setHTML('test', '<img src="file.gif" /><hr /><br />');
 		equals(ser.serialize(DOM.get('test')), '<div id="test"><img src="file.gif" /></div>');
 
@@ -1244,7 +1248,7 @@ function fakeKeyEvent(e, na, o) {
 		DOM.setHTML('test', '&lt;&gt;&amp;&quot;&nbsp;едц');
 		equals(ser.serialize(DOM.get('test')), '<div id="test">&lt;&gt;&amp;"&nbsp;&aring;&auml;&ouml;</div>');
 
-		ser = new tinymce.dom.Serializer({entity_encoding : 'named+numeric',entities : '160,nbsp,34,quot,38,amp,60,lt,62,gt'});
+		ser = new tinymce.dom.Serializer({entity_encoding : 'named,numeric',entities : '160,nbsp,34,quot,38,amp,60,lt,62,gt'});
 		DOM.setHTML('test', '&lt;&gt;&amp;&quot;&nbsp;едц');
 		equals(ser.serialize(DOM.get('test')), '<div id="test">&lt;&gt;&amp;"&nbsp;&#229;&#228;&#246;</div>');
 
@@ -1263,40 +1267,40 @@ function fakeKeyEvent(e, na, o) {
 
 		ser.setRules('style');
 		DOM.setHTML('test', '<style> body { background:#fff }</style>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<style><!--\n body { background:#fff }\n--></style>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<style> body { background:#fff }</style>');
 
 		ser.setRules('style');
 		DOM.setHTML('test', '<style>\r\n<![CDATA[\r\n   body { background:#fff }]]></style>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<style><!--\n   body { background:#fff }\n--></style>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<style>\n<![CDATA[\n   body { background:#fff }]]></style>');
 
 		ser.setRules('script[type|language|src]');
 
 		DOM.setHTML('test', '<script>// <img src="test"><a href="#"></a></script>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">// <![CDATA[\n// <img src="test"><a href="#"></a>\n// ]]></script>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script>// <img src="test"><a href="#"></a></script>');
 
 		DOM.setHTML('test', '<script>1 < 2;</script>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">// <![CDATA[\n1 < 2;\n// ]]></script>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script>1 < 2;</script>');
 
 		DOM.setHTML('test', '<script type="text/javascript">1 < 2;</script>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">// <![CDATA[\n1 < 2;\n// ]]></script>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">1 < 2;</script>');
 
 		DOM.setHTML('test', '<script type="text/javascript">\n\t1 < 2;\n\t if (2 < 1)\n\t\talert(1);\n</script>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">// <![CDATA[\n\t1 < 2;\n\t if (2 < 1)\n\t\talert(1);\n// ]]></script>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">\n\t1 < 2;\n\t if (2 < 1)\n\t\talert(1);\n</script>');
 
 		DOM.setHTML('test', '<script type="text/javascript"><!-- 1 < 2; // --></script>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">// <![CDATA[\n 1 < 2;\n// ]]></script>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript"><!-- 1 < 2; // --></script>');
 
 		DOM.setHTML('test', '<script type="text/javascript">\n\n<!-- 1 < 2;\n\n--></script>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">// <![CDATA[\n 1 < 2;\n// ]]></script>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">\n\n<!-- 1 < 2;\n\n--></script>');
 
 		DOM.setHTML('test', '<script type="text/javascript">// <![CDATA[1 < 2; // ]]></script>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">// <![CDATA[\n1 < 2;\n// ]]></script>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">// <![CDATA[1 < 2; // ]]></script>');
 
 		DOM.setHTML('test', '<script type="text/javascript"><![CDATA[1 < 2; ]]></script>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">// <![CDATA[\n1 < 2;\n// ]]></script>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript"><![CDATA[1 < 2; ]]></script>');
 
 		DOM.setHTML('test', '<script type="text/javascript">\n\n<![CDATA[\n\n1 < 2;\n\n]]>\n\n</script>');
-		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">// <![CDATA[\n1 < 2;\n// ]]></script>');
+		equals(ser.serialize(DOM.get('test')).replace(/\r/g, ''), '<script type="text/javascript">\n\n<![CDATA[\n\n1 < 2;\n\n]]>\n\n</script>');
 
 		DOM.setHTML('test', '<script type="text/javascript" src="test.js"></script>');
 		equals(ser.serialize(DOM.get('test')), '<script type="text/javascript" src="test.js"></script>');

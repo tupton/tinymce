@@ -14,24 +14,20 @@
 		is = tinymce.is,
 		isWebKit = tinymce.isWebKit,
 		isIE = tinymce.isIE,
-		blockRe = /^(H[1-6R]|P|DIV|ADDRESS|PRE|FORM|T(ABLE|BODY|HEAD|FOOT|H|R|D)|LI|OL|UL|CAPTION|BLOCKQUOTE|CENTER|DL|DT|DD|DIR|FIELDSET|NOSCRIPT|MENU|ISINDEX|SAMP)$/,
-		boolAttrs = makeMap('checked,compact,declare,defer,disabled,ismap,multiple,nohref,noresize,noshade,nowrap,readonly,selected'),
-		mceAttribs = makeMap('src,href,style,coords,shape'),
-		encodedChars = {'&' : '&amp;', '"' : '&quot;', '<' : '&lt;', '>' : '&gt;'},
-		encodeCharsRe = /[<>&\"]/g,
+		Entities = tinymce.dom.Entities,
+		boolAttrs = tinymce.makeMap('checked,compact,declare,defer,disabled,ismap,multiple,nohref,noresize,noshade,nowrap,readonly,selected'),
+		mceAttribs = tinymce.makeMap('src,href,style,coords,shape'),
 		simpleSelectorRe = /^([a-z0-9],?)+$/i,
 		tagRegExp = /<(\w+)((?:\s+\w+(?:\s*=\s*(?:(?:"[^"]*")|(?:'[^']*')|[^>\s]+))?)*)(\s*\/?)>/g,
-		attrRegExp = /(\w+)(?:\s*=\s*(?:(?:"((?:\\.|[^"])*)")|(?:'((?:\\.|[^'])*)')|([^>\s]+)))?/g;
+		attrRegExp = /(\w+)(?:\s*=\s*(?:(?:"((?:\\.|[^"])*)")|(?:'((?:\\.|[^'])*)')|([^>\s]+)))?/g,
+		protectedRegExp = /(<(script|style|noscript)[^>]*>([\w\W]*?)<\/(script|style|noscript)>)|(<!\[CDATA\[([\s\S]+)\]\]>)/gi,
+		blockElementsMap;
 
-	function makeMap(str) {
-		var map = {}, i;
-
-		str = str.split(',');
-		for (i = str.length; i >= 0; i--)
-			map[str[i]] = 1;
-
-		return map;
-	};
+	// Build block elements map but lowercase and uppercase
+	blockElementsMap = 'h1,h2,h3,h4,h5,h6,hr,p,div,address,pre,form,table,tbody,thead,tfoot,' + 
+						'th,tr,td,li,ol,ul,caption,blockquote,center,dl,dt,dd,dir,fieldset,' + 
+						'noscript,menu,isindex,samp,header,footer,article,section,hgroup';
+	blockElementsMap = tinymce.makeMap(blockElementsMap, ',', tinymce.makeMap(blockElementsMap.toUpperCase()));
 
 	/**
 	 * Utility class for various DOM manipulation and retrival functions.
@@ -89,6 +85,17 @@
 				} catch (e) {
 					t.cssFlicker = true;
 				}
+			}
+
+			if (isIE) {
+				// Add missing HTML 4/5 elements to IE
+				('abbr article aside audio canvas ' +
+				'details figcaption figure footer ' +
+				'header hgroup mark menu meter nav ' +
+				'output progress section summary ' +
+				'time video').replace(/\w+/g, function(name) {
+					d.createElement(name);
+				});
 			}
 
 			// Build styles list
@@ -1300,59 +1307,10 @@
 
 			// Store away src and href in _mce_src and mce_href since browsers mess them up
 			if (s.keep_values) {
-				// Wrap scripts and styles in comments for serialization purposes
-				if (/<script|noscript|style/i.test(h)) {
-					function trim(s) {
-						// Remove prefix and suffix code for element
-						s = s.replace(/(<!--\[CDATA\[|\]\]-->)/g, '\n');
-						s = s.replace(/^[\r\n]*|[\r\n]*$/g, '');
-						s = s.replace(/^\s*(\/\/\s*<!--|\/\/\s*<!\[CDATA\[|<!--|<!\[CDATA\[)[\r\n]*/g, '');
-						s = s.replace(/\s*(\/\/\s*\]\]>|\/\/\s*-->|\]\]>|-->|\]\]-->)\s*$/g, '');
-
-						return s;
-					};
-
-					// Wrap the script contents in CDATA and keep them from executing
-					h = h.replace(/<script([^>]+|)>([\s\S]*?)<\/script>/gi, function(v, attribs, text) {
-						// Force type attribute
-						if (!attribs)
-							attribs = ' type="text/javascript"';
-
-						// Convert the src attribute of the scripts
-						attribs = attribs.replace(/src=\"([^\"]+)\"?/i, function(a, url) {
-							if (s.url_converter)
-								url = t.encode(s.url_converter.call(s.url_converter_scope || t, t.decode(url), 'src', 'script'));
-
-							return '_mce_src="' + url + '"';
-						});
-
-						// Wrap text contents
-						if (tinymce.trim(text)) {
-							codeBlocks.push(trim(text));
-							text = '<!--\nMCE_SCRIPT:' + (codeBlocks.length - 1) + '\n// -->';
-						}
-
-						return '<mce:script' + attribs + '>' + text + '</mce:script>';
-					});
-
-					// Wrap style elements
-					h = h.replace(/<style([^>]+|)>([\s\S]*?)<\/style>/gi, function(v, attribs, text) {
-						// Wrap text contents
-						if (text) {
-							codeBlocks.push(trim(text));
-							text = '<!--\nMCE_SCRIPT:' + (codeBlocks.length - 1) + '\n-->';
-						}
-
-						return '<mce:style' + attribs + '>' + text + '</mce:style><style ' + attribs + ' _mce_bogus="1">' + text + '</style>';
-					});
-
-					// Wrap noscript elements
-					h = h.replace(/<noscript([^>]+|)>([\s\S]*?)<\/noscript>/g, function(v, attribs, text) {
-						return '<mce:noscript' + attribs + '><!--' + t.encode(text).replace(/--/g, '&#45;&#45;') + '--></mce:noscript>';
-					});
-				}
-
-				h = h.replace(/<!\[CDATA\[([\s\S]+)\]\]>/g, '<!--[CDATA[$1]]-->');
+				// Protect some elements from processing by the editor users shouldn't put this crap in there anyway.
+				h = h.replace(protectedRegExp, function(chunk) {
+					return '<!--mce:protected(' + escape(chunk) + ')-->';
+				});
 
 				// This function processes the attributes in the HTML string to force boolean
 				// attributes to the attr="attr" format and convert style, src and href to _mce_ versions
@@ -1394,11 +1352,6 @@
 				};
 
 				h = processTags(h);
-
-				// Restore script blocks
-				h = h.replace(/MCE_SCRIPT:([0-9]+)/g, function(val, idx) {
-					return codeBlocks[idx];
-				});
 			}
 
 			return h;
@@ -1485,41 +1438,16 @@
 		 * @param {String} s String to decode entities on.
 		 * @return {String} Entity decoded string.
 		 */
-		decode : function(s) {
-			var e, n, v;
-
-			// Look for entities to decode
-			if (/&[\w#]+;/.test(s)) {
-				// Decode the entities using a div element not super efficient but less code
-				e = this.doc.createElement("div");
-				e.innerHTML = s;
-				n = e.firstChild;
-				v = '';
-
-				if (n) {
-					do {
-						v += n.nodeValue;
-					} while (n = n.nextSibling);
-				}
-
-				return v || s;
-			}
-
-			return s;
-		},
+		decode : Entities.decode,
 
 		/**
 		 * Entity encodes a string, encodes the most common entities <>"& into entities.
 		 *
 		 * @method encode
-		 * @param {String} s String to encode with entities.
+		 * @param {String} text String to encode with entities.
 		 * @return {String} Entity encoded string.
 		 */
-		encode : function(str) {
-			return ('' + str).replace(encodeCharsRe, function(chr) {
-				return encodedChars[chr];
-			});
-		},
+		encode : Entities.encodeAllRaw,
 
 		/**
 		 * Inserts a element after the reference element.
@@ -1551,16 +1479,17 @@
 		 * Returns true/false if the specified element is a block element or not.
 		 *
 		 * @method isBlock
-		 * @param {Node} n Element/Node to check.
+		 * @param {Node/String} node Element/Node to check.
 		 * @return {Boolean} True/False state if the node is a block element or not.
 		 */
-		isBlock : function(n) {
-			if (n.nodeType && n.nodeType !== 1)
-				return false;
+		isBlock : function(node) {
+			var type = node.nodeType;
 
-			n = n.nodeName || n;
+			// If it's a node then check the type and use the nodeName
+			if (type)
+				return !!(type === 1 && blockElementsMap[node.nodeName]);
 
-			return blockRe.test(n);
+			return !!blockElementsMap[node];
 		},
 
 		/**

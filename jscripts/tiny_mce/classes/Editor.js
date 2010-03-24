@@ -431,9 +431,12 @@
 				force_p_newlines : 1,
 				indentation : '30px',
 				keep_styles : 1,
-				fix_table_elements : 1,
 				inline_styles : 1,
-				convert_fonts_to_spans : true
+				convert_fonts_to_spans : true,
+				indent_before : 'p,h1,h2,h3,h4,h5,h6,blockquote,div,title,style,pre,script,td,ul,li,area',
+				indent_after : 'p,h1,h2,h3,h4,h5,h6,blockquote,div,title,style,pre,script,td,ul,li,area',
+				fix_table_elements : true,
+				fix_list_elements : true
 			}, s);
 
 			/**
@@ -816,6 +819,14 @@
 			}
 
 			/**
+			 * Schema instance, enables you to validate elements and it's children.
+			 *
+			 * @property schema
+			 * @type tinymce.dom.Schema
+			 */
+			t.schema = new tinymce.dom.Schema(s);
+
+			/**
 			 * DOM instance for the editor.
 			 *
 			 * @property dom
@@ -831,14 +842,6 @@
 				fix_ie_paragraphs : 1,
 				valid_styles : s.valid_styles
 			});
-
-			/**
-			 * Schema instance, enables you to validate elements and it's children.
-			 *
-			 * @property schema
-			 * @type tinymce.dom.Schema
-			 */
-			t.schema = new tinymce.dom.Schema();
 
 			/**
 			 * DOM serializer for the editor.
@@ -1007,6 +1010,16 @@
 				t.onPostProcess.add(function(ed, o) {
 					if (o.set)
 						handleCustom(ed, o);
+				});
+			}
+
+			if (s.protect_patterns) {
+				t.onBeforeSetContent.add(function(ed, args) {
+					each(s.protect_patterns, function(pattern) {
+						args.content = args.content.replace(pattern, function(chunk) {
+							return '<!--mce:protected(' + escape(chunk) + ')-->';
+						});
+					});
 				});
 			}
 

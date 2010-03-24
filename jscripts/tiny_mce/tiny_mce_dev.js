@@ -73,6 +73,7 @@
 	include('util/JSONP.js');
 	include('util/XHR.js');
 	include('util/JSONRequest.js');
+	include('dom/Entities.js');
 	include('dom/DOMUtils.js');
 	include('dom/Range.js');
 	include('dom/TridentSelection.js');
