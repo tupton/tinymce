@@ -48,9 +48,23 @@
 			if (s.image)
 				h += '<img class="mceIcon" src="' + s.image + '" />' + l + '</a>';
 			else
-				h += '<span class="mceIcon ' + s['class'] + '"></span>' + (l ? '<span class="' + cp + 'Label">' + l + '</span>' : '') + '</a>';
+				h += '<span class="mceIcon ' + s['class'] + '"></span>' + (l ? '<span class="' + cp + 'Label" id="' + this.id + '_label">' + l + '</span>' : '') + '</a>';
 
 			return h;
+		},
+
+		setLabel: function(label) {
+			var element = DOM.get(this.id + '_label');
+			if (element) {
+				element.innerHTML = DOM.encode(label || '');
+			}
+		},
+
+		setTitle: function(title) {
+			var element = DOM.get(this.id);
+			if (element) {
+				element.title = DOM.encode(title || ''); 
+			}
 		},
 
 		/**
